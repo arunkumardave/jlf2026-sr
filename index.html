@@ -1,0 +1,3792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>JLF 2026 Sessions Recommender</title>
+
+<style>
+:root {
+  --pink:#D1256D;
+  --purple:#4A148C;
+  --gold:#FFB300;
+  --cream:#FDFBF7;
+  --dark:#333;
+  --fontH: Georgia, serif;
+  --fontB: Helvetica, Arial, sans-serif;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0;
+  font-family:var(--fontB);
+  background:var(--cream);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+}
+.app {
+  width:100%;
+  max-width:680px;
+  background:#fff;
+  border-radius:12px;
+  box-shadow:0 10px 40px rgba(0,0,0,.1);
+  overflow:hidden;
+  border-top:6px solid var(--pink);
+}
+header {
+  padding:24px;
+  text-align:center;
+}
+header h1 {
+  margin:0;
+  font-family:var(--fontH);
+  color:var(--pink);
+}
+header p {
+  margin:10px 0 0;
+  color:#666;
+  font-size:.95rem;
+  line-height:1.5;
+}
+.slide {
+  display:none;
+  padding:30px;
+}
+.slide.active { display:block; }
+h2 {
+  font-family:var(--fontH);
+  color:var(--purple);
+}
+.tags {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.tag {
+  padding:8px 14px;
+  border:1px solid #ddd;
+  border-radius:20px;
+  cursor:pointer;
+  font-size:.85rem;
+}
+.tag.selected {
+  background:var(--pink);
+  color:#fff;
+  border-color:var(--pink);
+}
+.category {
+  margin-bottom:20px;
+}
+.category h3 {
+  margin:0 0 8px;
+  font-size:.95rem;
+  color:#444;
+}
+.date {
+  display:flex;
+  align-items:center;
+  padding:12px;
+  border:1px solid #eee;
+  border-radius:8px;
+  margin-bottom:10px;
+  cursor:pointer;
+}
+.date input { margin-right:12px; accent-color:var(--pink); }
+.footer {
+  display:flex;
+  justify-content:space-between;
+  margin-top:30px;
+}
+button {
+  padding:12px 20px;
+  border:none;
+  border-radius:4px;
+  font-family:var(--fontH);
+  font-weight:bold;
+  cursor:pointer;
+}
+.primary { background:var(--pink); color:#fff; }
+.secondary { background:#eee; }
+
+.slider-wrap {
+  text-align:center;
+  margin-top:20px;
+}
+.slider-val {
+  font-size:3.2rem;
+  color:var(--pink);
+  font-family:var(--fontH);
+}
+.slider-label {
+  margin-top:6px;
+  font-size:.9rem;
+  color:#666;
+}
+input[type=range] {
+  width:100%;
+  margin-top:20px;
+}
+
+.results {
+  max-height:500px;
+  overflow-y:auto;
+}
+.day {
+  position:sticky;
+  top:0;
+  background:var(--cream);
+  padding:8px 0;
+  border-bottom:2px solid var(--purple);
+  font-family:var(--fontH);
+}
+.card {
+  background:#fff;
+  border-left:4px solid var(--gold);
+  padding:14px;
+  margin:14px 0;
+  box-shadow:0 2px 5px rgba(0,0,0,.05);
+}
+.time { font-size:.85rem; color:#777; font-weight:bold; }
+.title { font-weight:bold; margin:5px 0; }
+.venue { color:var(--pink); font-size:.85rem; }
+.speakers { font-style:italic; font-size:.9rem; margin-top:6px; }
+.badge {
+  float:right;
+  font-size:.7rem;
+  padding:2px 6px;
+  border-radius:4px;
+  background:#eee;
+}
+.match { background:#c8f7c5; }
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<header>
+  <h1>JLF 2026 Sessions Recommender</h1>
+  <p>
+    With 300+ sessions and 400+ speakers, the Jaipur Literature Festival can be overwhelming. 
+    Let our AI-powered recommender craft your personalised itinerary.
+  </p>
+</header>
+
+<div class="slide active" id="s1">
+  <h2>Choose your interests</h2>
+  <div id="tags"></div>
+  <div class="footer">
+    <span></span>
+    <button class="primary" onclick="go(2)">Next →</button>
+  </div>
+</div>
+
+<div class="slide" id="s2">
+  <h2>Dates attending</h2>
+  <div id="dates"></div>
+  <div class="footer">
+    <button class="secondary" onclick="go(1)">← Back</button>
+    <button class="primary" onclick="go(3)">Next →</button>
+  </div>
+</div>
+
+<div class="slide" id="s3">
+  <h2>Pace your day</h2>
+
+  <div class="slider-wrap">
+    <div class="slider-val" id="count">4</div>
+    <div class="slider-label">sessions per day</div>
+  </div>
+
+  <input type="range" min="1" max="8" value="4"
+    oninput="count.innerText=this.value; state.limit=+this.value">
+
+  <div class="footer">
+    <button class="secondary" onclick="go(2)">← Back</button>
+    <button class="primary" onclick="generate()">Curate</button>
+  </div>
+</div>
+
+<div class="slide" id="s4">
+  <h2>Your itinerary</h2>
+  <div class="results" id="results"></div>
+  <div class="footer">
+    <button class="secondary" onclick="location.reload()">Start over</button>
+    <button class="primary" onclick="window.print()">Print</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+/* ---------- SAMPLE DATA ---------- */
+const DATA = [
+  {
+    "id": 3975,
+    "title": "The Loneliness of Sonia and Sunny",
+    "start": "2026-01-15T12:00",
+    "end": "2026-01-15T12:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Kiran Desai",
+      "Nandini Nair"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 3976,
+    "title": "Embers of War: The Fall of an Empire and the Making of Americas Vietnam",
+    "start": "2026-01-15T12:00",
+    "end": "2026-01-15T12:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Fredrik Logevall",
+      "Sam Dalrymple"
+    ],
+    "tags": [
+      "History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 3977,
+    "title": "Twice Told Tales",
+    "start": "2026-01-15T12:00",
+    "end": "2026-01-15T12:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Daisy Rockwell",
+      "Deepa Bhasthi",
+      "Kanishka Gupta"
+    ],
+    "tags": [
+      "Translation"
+    ]
+  },
+  {
+    "id": 3978,
+    "title": "Night Trains, Small Children and Wagging Tails: Journeys on the Railways of India and Beyond",
+    "start": "2026-01-15T12:00",
+    "end": "2026-01-15T12:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Monisha Rajesh",
+      "Divya Dugar",
+      "Bee Rowlatt"
+    ],
+    "tags": [
+      "Culture,Travel"
+    ]
+  },
+  {
+    "id": 4183,
+    "title": "Myth and Memory",
+    "start": "2026-01-15T12:00",
+    "end": "2026-01-15T12:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Volga",
+      "Salma",
+      "Elizabeth Kuruvilla"
+    ],
+    "tags": []
+  },
+  {
+    "id": 3979,
+    "title": "Javed Akhtar: Points of View",
+    "start": "2026-01-15T13:00",
+    "end": "2026-01-15T13:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Javed Akhtar",
+      "Warisha Farasat"
+    ],
+    "tags": [
+      "Culture,Poetry"
+    ]
+  },
+  {
+    "id": 3980,
+    "title": "Unplugged: Adventures from MTV to Timbuktu:",
+    "start": "2026-01-15T13:00",
+    "end": "2026-01-15T13:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Tom Freston",
+      "Saad Mohseni"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 3981,
+    "title": "Reimagining India’s Economy",
+    "start": "2026-01-15T13:00",
+    "end": "2026-01-15T13:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Arun Maira",
+      "A.K. Bhattacharya",
+      "Mohit Satyanand"
+    ],
+    "tags": [
+      "Economy,India"
+    ]
+  },
+  {
+    "id": 3982,
+    "title": "Threads of Dissent",
+    "start": "2026-01-15T13:00",
+    "end": "2026-01-15T13:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Deepti Priya Mehrotra",
+      "Swati Pandey",
+      "Vrinda Grover",
+      "Banu Mushtaq",
+      "Puneeta Roy"
+    ],
+    "tags": [
+      "Activism,Law,Theatre"
+    ]
+  },
+  {
+    "id": 3991,
+    "title": "Proto: How One Ancient Language Went Global",
+    "start": "2026-01-15T13:00",
+    "end": "2026-01-15T13:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Laura Spinney",
+      "Martin Puchner"
+    ],
+    "tags": [
+      "History,Travel"
+    ]
+  },
+  {
+    "id": 4233,
+    "title": "Poetry: Khud Se Baat",
+    "start": "2026-01-15T13:00",
+    "end": "2026-01-15T13:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Anshu Harsh",
+      "Jagdeep Singh"
+    ],
+    "tags": []
+  },
+  {
+    "id": 3984,
+    "title": "The Seven Rules of Trust",
+    "start": "2026-01-15T14:00",
+    "end": "2026-01-15T14:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Jimmy Wales",
+      "Anita Anand"
+    ],
+    "tags": [
+      "Self-help"
+    ]
+  },
+  {
+    "id": 3985,
+    "title": "The Bharat Series- The Ayodhya Alliance",
+    "start": "2026-01-15T14:00",
+    "end": "2026-01-15T14:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Ashwin Sanghi",
+      "Shunali Khullar Shroff"
+    ],
+    "tags": [
+      "Mythology"
+    ]
+  },
+  {
+    "id": 3986,
+    "title": "FIRST EDITION: Seeking the Infinite by Yakub Mathew",
+    "start": "2026-01-15T14:00",
+    "end": "2026-01-15T14:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Yakub Mathew",
+      "Haji Syed Salman Chishty",
+      "Neelima Dalmia Adhar",
+      "Shri Anish",
+      "Kishwar Desai"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 3987,
+    "title": "FIRST EDITION: A Statesman and a Seeker: The Life and Legacy of Dr.Karan Singh by Harbans Singh",
+    "start": "2026-01-15T14:00",
+    "end": "2026-01-15T14:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Karan Singh",
+      "Harbans Singh",
+      "Ravi Singh",
+      "Namita Gokhale",
+      "William Dalrymple",
+      "Sanjoy K. Roy"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 3988,
+    "title": "FIRST EDITION: The Art of Being Fabulous by Shalini Passi",
+    "start": "2026-01-15T14:00",
+    "end": "2026-01-15T14:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Shalini Passi",
+      "Ruchika Mehta"
+    ],
+    "tags": []
+  },
+  {
+    "id": 3989,
+    "title": "Heart Lamp",
+    "start": "2026-01-15T15:00",
+    "end": "2026-01-15T15:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Banu Mushtaq",
+      "Moutushi Mukherjee"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 3990,
+    "title": "Coexistence: How Arabs and Jews Can Live Together",
+    "start": "2026-01-15T15:00",
+    "end": "2026-01-15T15:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Ussama Makdisi",
+      "Noa Avishag Schnall",
+      "Avi Shlaim",
+      "William Sieghart"
+    ],
+    "tags": [
+      "Geopolitics"
+    ]
+  },
+  {
+    "id": 3994,
+    "title": "Sanskrit Pundits in Premodern India : Reclaiming the Immediate Past",
+    "start": "2026-01-15T15:00",
+    "end": "2026-01-15T15:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Radhavallabh Tripathi",
+      "Renuka Rathore"
+    ],
+    "tags": [
+      "Indian History"
+    ]
+  },
+  {
+    "id": 3995,
+    "title": "T​he Geography of Belonging",
+    "start": "2026-01-15T15:00",
+    "end": "2026-01-15T15:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Andreas Unterweger",
+      "Sarnath Banerjee",
+      "Swati Chopra"
+    ],
+    "tags": [
+      "Fiction,Identity,Poetry"
+    ]
+  },
+  {
+    "id": 3983,
+    "title": "Iran to India",
+    "start": "2026-01-15T15:00",
+    "end": "2026-01-15T15:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Alka Patel",
+      "Sam Dalrymple"
+    ],
+    "tags": [
+      "History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4234,
+    "title": "Colours of the Desert",
+    "start": "2026-01-15T15:00",
+    "end": "2026-01-15T15:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Tripti Pandey",
+      "Rima Hooja"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4186,
+    "title": "The Undying Light: Indias Futures",
+    "start": "2026-01-15T16:00",
+    "end": "2026-01-15T16:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Gopalkrishna Gandhi",
+      "Narayani Basu"
+    ],
+    "tags": [
+      "Indian History"
+    ]
+  },
+  {
+    "id": 4187,
+    "title": "The Paradoxes of Progress",
+    "start": "2026-01-15T16:00",
+    "end": "2026-01-15T16:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Priyambada Jayakumar",
+      "Manu Joseph",
+      "Sanjoy K. Roy"
+    ],
+    "tags": [
+      "India,Non-Fiction"
+    ]
+  },
+  {
+    "id": 3996,
+    "title": "Fiction, Faction and the Spaces in Between",
+    "start": "2026-01-15T16:00",
+    "end": "2026-01-15T16:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Keshava Guha",
+      "Michelle Gallen",
+      "Niamh Campbell",
+      "Julia Wheeler"
+    ],
+    "tags": [
+      "Fiction,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4001,
+    "title": "AI and The Future of Books, Reading and Narratives",
+    "start": "2026-01-15T16:00",
+    "end": "2026-01-15T16:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Meru Gokhale",
+      "Martin Puchner",
+      "Gurcharan Das",
+      "Emma House"
+    ],
+    "tags": [
+      "Literature,Technology"
+    ]
+  },
+  {
+    "id": 3998,
+    "title": "Worlds Within Words: K.R. Meera",
+    "start": "2026-01-15T16:00",
+    "end": "2026-01-15T16:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "K. R. Meera",
+      "Mandira Nayar"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4191,
+    "title": "Illuminating Translations",
+    "start": "2026-01-15T16:00",
+    "end": "2026-01-15T16:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4235,
+    "title": "Bhootkatha: Ghostly Tales",
+    "start": "2026-01-15T16:00",
+    "end": "2026-01-15T16:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Arundhati Nath",
+      "Eric Chopra"
+    ],
+    "tags": []
+  },
+  {
+    "id": 3999,
+    "title": "A Sixth of Humanity: Independent Indias Development Odyssey",
+    "start": "2026-01-15T17:00",
+    "end": "2026-01-15T17:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Devesh Kapur",
+      "Arvind Subramanian",
+      "Premila Nazareth Satyanand"
+    ],
+    "tags": [
+      "Economy,History,Politics"
+    ]
+  },
+  {
+    "id": 4000,
+    "title": "The Language of Birds",
+    "start": "2026-01-15T17:00",
+    "end": "2026-01-15T17:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Tara Gandhi",
+      "Stephen Alter",
+      "Neha Sinha"
+    ],
+    "tags": [
+      "Climate,Natural Habitat,Nature"
+    ]
+  },
+  {
+    "id": 3997,
+    "title": "Shaping the Indian Century",
+    "start": "2026-01-15T17:00",
+    "end": "2026-01-15T17:50",
+    "venue": "Durbar Hall",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4010,
+    "title": "The Personal and the Political",
+    "start": "2026-01-15T17:00",
+    "end": "2026-01-15T17:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Alok-Vaid Menon",
+      "Karuna Ezara Parikh",
+      "Anish Gawande"
+    ],
+    "tags": [
+      "Identity,Poetry,Politics"
+    ]
+  },
+  {
+    "id": 4192,
+    "title": "Designed to Please",
+    "start": "2026-01-15T17:00",
+    "end": "2026-01-15T17:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4236,
+    "title": "Gobar Dhan: Rural Aesthetics",
+    "start": "2026-01-15T17:00",
+    "end": "2026-01-15T17:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Rekha Bhatnagar",
+      "Rima Hooja"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4003,
+    "title": "FIRST EDITION: Older Bolder by Aman Nath",
+    "start": "2026-01-15T18:00",
+    "end": "2026-01-15T18:30",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Aman Nath",
+      "Ravi Singh",
+      "Sanjoy K. Roy",
+      "Zeenat Aman"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4004,
+    "title": "FIRST EDITION: Every Last Girl by Safeena Husain",
+    "start": "2026-01-15T18:00",
+    "end": "2026-01-15T18:30",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Safeena Husain",
+      "Susanna B. Afan"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4005,
+    "title": "FIRST EDITION: The Courage to Be You- Love, Identity and Healing in a Changing India by Rashna Imhasly",
+    "start": "2026-01-15T18:00",
+    "end": "2026-01-15T18:30",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Rashna Imhasly",
+      "Amrita Tripathi",
+      "Brigitte Singh",
+      "Namita Gokhale"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4006,
+    "title": "FIRST EDITION: Alphabets of Africa: By Abhay K",
+    "start": "2026-01-15T18:00",
+    "end": "2026-01-15T18:30",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Abhay K."
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4193,
+    "title": "Sometimes Only a Poem Will Do",
+    "start": "2026-01-15T18:00",
+    "end": "2026-01-15T18:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4007,
+    "title": "Shattered Lands : Five Partitions and the Making of Modern Asia",
+    "start": "2026-01-15T18:30",
+    "end": "2026-01-15T19:20",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Sam Dalrymple",
+      "Abhishek Choudhary"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4008,
+    "title": "Headlines That Shaped A Nation",
+    "start": "2026-01-15T18:30",
+    "end": "2026-01-15T19:20",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Jyotsna Mohan",
+      "Harinder (Shammy) Baweja",
+      "Bhawana Somaaya",
+      "Navdeep Suri"
+    ],
+    "tags": [
+      "History,Journalism"
+    ]
+  },
+  {
+    "id": 3992,
+    "title": "The Scapegoat: The Brilliant Brief Life of the Duke of Buckingham",
+    "start": "2026-01-15T18:30",
+    "end": "2026-01-15T19:20",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Lucy Hughes-Hallett",
+      "Anita Anand"
+    ],
+    "tags": [
+      "Biography"
+    ]
+  },
+  {
+    "id": 4009,
+    "title": "The Future Library",
+    "start": "2026-01-15T18:30",
+    "end": "2026-01-15T19:20",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Anne Beate Hovind",
+      "Vivek Shanbhag",
+      "Ranjit Hoskote",
+      "Emma House"
+    ],
+    "tags": [
+      "Culture,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4012,
+    "title": "The Odyssey",
+    "start": "2026-01-16T10:00",
+    "end": "2026-01-16T10:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Stephen Fry",
+      "Simon Goldhill",
+      "Josephine Quinn"
+    ],
+    "tags": [
+      "History,Literature"
+    ]
+  },
+  {
+    "id": 4013,
+    "title": "Lightning Kid",
+    "start": "2026-01-16T10:00",
+    "end": "2026-01-16T10:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Vishwanathan Anand",
+      "Rahul Bhattacharya"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 4014,
+    "title": "The Philanthropy Paradox",
+    "start": "2026-01-16T10:00",
+    "end": "2026-01-16T10:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Esther Duflo",
+      "Siddharth Sharma",
+      "Naushad Forbes"
+    ],
+    "tags": [
+      "Non-Fiction,Philanthropy"
+    ]
+  },
+  {
+    "id": 4015,
+    "title": "The Lost Heer: Women in Colonial Punjab",
+    "start": "2026-01-16T10:00",
+    "end": "2026-01-16T10:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Harleen Singh",
+      "Anita Anand"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4184,
+    "title": "The Inner Line: Mapping Identity, Intention, and Impact",
+    "start": "2026-01-16T10:00",
+    "end": "2026-01-16T10:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Ranjay Gulati",
+      "Arun Maira",
+      "Jaideep Prabhu",
+      "Vinita Gupta"
+    ],
+    "tags": [
+      "Non-Fiction,Self-help"
+    ]
+  },
+  {
+    "id": 4017,
+    "title": "The Travel Session",
+    "start": "2026-01-16T11:00",
+    "end": "2026-01-16T11:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Geoff Dyer",
+      "Lyse Doucet",
+      "Noa Avishag Schnall",
+      "Pallavi Aiyar",
+      "Monisha Rajesh"
+    ],
+    "tags": [
+      "Travel"
+    ]
+  },
+  {
+    "id": 4018,
+    "title": "Roerich: Himalyan Vistas",
+    "start": "2026-01-16T11:00",
+    "end": "2026-01-16T11:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Vladimir Zaitsev",
+      "Sanjeev Chopra"
+    ],
+    "tags": [
+      "Art,History"
+    ]
+  },
+  {
+    "id": 4019,
+    "title": "Pahari: Masterpieces from the Punjab Hills",
+    "start": "2026-01-16T11:00",
+    "end": "2026-01-16T11:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Debra Diamond",
+      "Naman Ahuja",
+      "Sonya Rhie Mace",
+      "William Dalrymple"
+    ],
+    "tags": [
+      "Art,History"
+    ]
+  },
+  {
+    "id": 4020,
+    "title": "Legacies of Enterprise: Trading Lessons Across Time",
+    "start": "2026-01-16T11:00",
+    "end": "2026-01-16T11:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Gurcharan Das",
+      "Naushad Forbes",
+      "Shinjini Kumar"
+    ],
+    "tags": [
+      "Culture,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4195,
+    "title": "Futurescape: Spotting Trends in the Publishing Industry",
+    "start": "2026-01-16T11:00",
+    "end": "2026-01-16T11:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4237,
+    "title": "Baaton Baaton Mein: Talking Books, Talking Films",
+    "start": "2026-01-16T11:00",
+    "end": "2026-01-16T11:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Poonam Saxena",
+      "Kumari Rohini"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4021,
+    "title": "A Bit of Fry",
+    "start": "2026-01-16T12:00",
+    "end": "2026-01-16T12:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Stephen Fry",
+      "Anish Gawande"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 4022,
+    "title": "Where We Belong: Between Exile and Return",
+    "start": "2026-01-16T12:00",
+    "end": "2026-01-16T12:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Jeet Thayil",
+      "Geoff Dyer",
+      "Tash Aw",
+      "Nandini Nair"
+    ],
+    "tags": [
+      "Fiction,Memoir,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4023,
+    "title": "Where is My Mind?",
+    "start": "2026-01-16T12:00",
+    "end": "2026-01-16T12:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Neha Kirpal",
+      "Vikram Patel",
+      "Amrita Tripathi",
+      "Puneeta Roy"
+    ],
+    "tags": [
+      "Mental Health"
+    ]
+  },
+  {
+    "id": 4024,
+    "title": "Fractured World: Pathways to Peace",
+    "start": "2026-01-16T12:00",
+    "end": "2026-01-16T12:50",
+    "venue": "Durbar Hall",
+    "speakers": [],
+    "tags": [
+      "Geopolitics"
+    ]
+  },
+  {
+    "id": 4025,
+    "title": "Jan, Jungle, Jameen",
+    "start": "2026-01-16T12:00",
+    "end": "2026-01-16T12:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Hari Ram Meena",
+      "Parwati Tirkey",
+      "Devyani Bhardwaj"
+    ],
+    "tags": [
+      "Culture,Fiction,Literature,Poetry"
+    ]
+  },
+  {
+    "id": 4196,
+    "title": "Hindi Literary Podcasts: Sahitya ke Naye Khojdeep",
+    "start": "2026-01-16T12:00",
+    "end": "2026-01-16T12:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4238,
+    "title": "Encounters with Wildlife: Jungle Mein Mangal",
+    "start": "2026-01-16T12:00",
+    "end": "2026-01-16T12:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Stephen Alter",
+      "Prajwal Parajuly"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4026,
+    "title": "FIRST EDITION: BAPJI, Maharaja of Marwar-Jodhpur: The King Who Would Be Man by Aman Nath and Yogi Vaid",
+    "start": "2026-01-16T13:00",
+    "end": "2026-01-16T13:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Yogi Vaid",
+      "Aman Nath",
+      "H.H. Gaj Singh, Maharaja of Jodhpur"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4027,
+    "title": "Blood and Sand: Suez 1956",
+    "start": "2026-01-16T13:00",
+    "end": "2026-01-16T13:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Alex von Tunzelmann",
+      "Ussama Makdisi",
+      "Avi Shlaim",
+      "Anita Anand"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4028,
+    "title": "The Age of Sri Aurobindo",
+    "start": "2026-01-16T13:00",
+    "end": "2026-01-16T13:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Pariksith Singh",
+      "Shaunaka Rishi Das"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4029,
+    "title": "Ojas Art: Ascending Roots",
+    "start": "2026-01-16T13:00",
+    "end": "2026-01-16T13:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Ravinder Reddy",
+      "Premjish Achari"
+    ],
+    "tags": [
+      "Art,Culture"
+    ]
+  },
+  {
+    "id": 4030,
+    "title": "FIRST EDITION: Tell My Mother, I Like Boys by Suvir Saran",
+    "start": "2026-01-16T13:00",
+    "end": "2026-01-16T13:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Suvir Saran",
+      "Asad Lalljee",
+      "Shobhaa De"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4031,
+    "title": "Poor Economics",
+    "start": "2026-01-16T14:00",
+    "end": "2026-01-16T14:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Esther Duflo",
+      "Meru Gokhale"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4032,
+    "title": "Where Does Fiction Come From?",
+    "start": "2026-01-16T14:00",
+    "end": "2026-01-16T14:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Kiran Desai",
+      "Esther Freud",
+      "Tash Aw",
+      "Richard Miller Flanagan",
+      "Anuradha Roy"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4033,
+    "title": "Partition: Archiving Unspoken Tales",
+    "start": "2026-01-16T14:00",
+    "end": "2026-01-16T14:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Sam Dalrymple",
+      "Bhawana Somaaya",
+      "Jyotsna Mohan"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4034,
+    "title": "The Alchemy of Ambition",
+    "start": "2026-01-16T14:00",
+    "end": "2026-01-16T14:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Rohit Sarin",
+      "Vinita Gupta",
+      "Mukesh Sud"
+    ],
+    "tags": [
+      "Entrepreneurship,Self-help"
+    ]
+  },
+  {
+    "id": 4035,
+    "title": "These Too are Stories",
+    "start": "2026-01-16T14:00",
+    "end": "2026-01-16T14:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Rachana Yadav",
+      "Poonam Saxena",
+      "Vaishali Mathur",
+      "Ashutosh Kumar Thakur"
+    ],
+    "tags": [
+      "Culture,Memoir,Translation"
+    ]
+  },
+  {
+    "id": 4198,
+    "title": "Emerging Markets for Indian Publishing",
+    "start": "2026-01-16T14:00",
+    "end": "2026-01-16T14:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4239,
+    "title": "Mera Bachpan: My Childhood",
+    "start": "2026-01-16T14:00",
+    "end": "2026-01-16T14:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Pushpesh Pant",
+      "Prabhat Ranjan"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4036,
+    "title": "For and Against: A United Ireland",
+    "start": "2026-01-16T15:00",
+    "end": "2026-01-16T15:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Fintan OTool",
+      "Sam McBride",
+      "Jane Ohlmeyer"
+    ],
+    "tags": [
+      "History,Politics"
+    ]
+  },
+  {
+    "id": 4038,
+    "title": "God Particle: The Story of Everything",
+    "start": "2026-01-16T15:00",
+    "end": "2026-01-16T15:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Archana Sharma",
+      "Geraint Lewis",
+      "Marcus du Sautoy"
+    ],
+    "tags": [
+      "Science"
+    ]
+  },
+  {
+    "id": 4039,
+    "title": "The Dark Renaissance: The Dangerous Times and Fatal Genius of Shakespeare’s Greatest Rival, Christopher Marlowe",
+    "start": "2026-01-16T15:00",
+    "end": "2026-01-16T15:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Stephen Greenblatt",
+      "Lucy Hughes-Hallett"
+    ],
+    "tags": [
+      "Literature"
+    ]
+  },
+  {
+    "id": 4040,
+    "title": "Writing the Great Indian Novel",
+    "start": "2026-01-16T15:00",
+    "end": "2026-01-16T15:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Ruchir Joshi",
+      "Rahul Bhattacharya",
+      "Nandini Nair"
+    ],
+    "tags": [
+      "Fiction,Writing"
+    ]
+  },
+  {
+    "id": 4199,
+    "title": "Listen in: The Evolving Story of the Audio book",
+    "start": "2026-01-16T15:00",
+    "end": "2026-01-16T15:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4240,
+    "title": "Kavita Ki Kaya: The Shape of a Poem",
+    "start": "2026-01-16T15:00",
+    "end": "2026-01-16T15:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Parwati Tirkey",
+      "Devyani Bhardwaj"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4041,
+    "title": "The Sensual Self: Glamour, Celebrity and Substance",
+    "start": "2026-01-16T16:00",
+    "end": "2026-01-16T16:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Shobhaa De",
+      "Anish Gawande"
+    ],
+    "tags": [
+      "Self-help"
+    ]
+  },
+  {
+    "id": 4042,
+    "title": "Peacemaker: U Thant and the Forgotten Quest for a Just World",
+    "start": "2026-01-16T16:00",
+    "end": "2026-01-16T16:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Thant Myint-U",
+      "Narayani Basu"
+    ],
+    "tags": [
+      "Biography,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4043,
+    "title": "Spectral Tales",
+    "start": "2026-01-16T16:00",
+    "end": "2026-01-16T16:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Daisy Rockwell",
+      "Eric Chopra"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4044,
+    "title": "Bhutan Echoes: Stories From The Dragon Kingdom",
+    "start": "2026-01-16T16:00",
+    "end": "2026-01-16T16:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Kunzang Choden Roder",
+      "Charmi Chheda",
+      "Mita Kapur"
+    ],
+    "tags": [
+      "Culture,Himalayas,History"
+    ]
+  },
+  {
+    "id": 4200,
+    "title": "The Scent of Books: Stories about Bookstores",
+    "start": "2026-01-16T16:00",
+    "end": "2026-01-16T16:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4241,
+    "title": "Kathanak: My Story, Our Stories",
+    "start": "2026-01-16T16:00",
+    "end": "2026-01-16T16:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Nand Bhardwaj",
+      "Tasneem Khan"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4045,
+    "title": "FIRST EDITION: Chapal Rani, the Last Queen of Bengal: By Sandip Roy",
+    "start": "2026-01-16T17:00",
+    "end": "2026-01-16T17:30",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Sandip Roy",
+      "Georgina Godwin",
+      "Kiran Desai"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4046,
+    "title": "FIRST EDITION: Dhurandhar by Sandeep Dahisarkar",
+    "start": "2026-01-16T17:00",
+    "end": "2026-01-16T17:30",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Sandeep Dahisarkar",
+      "Lakshmi Puri",
+      "Namita Gokhale"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4047,
+    "title": "FIRST EDITION: O-Nainital by Pushpesh Pant",
+    "start": "2026-01-16T17:00",
+    "end": "2026-01-16T17:30",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Pushpesh Pant",
+      "Prabhat Ranjan",
+      "Anamika"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4048,
+    "title": "FIRST EDITION: The Tigers Champion by James Champion",
+    "start": "2026-01-16T17:00",
+    "end": "2026-01-16T17:30",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "James Champion",
+      "Neha Sinha",
+      "Stephen Alter"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4201,
+    "title": "Children’s Publishing Roundtable: Nurturing New Readers",
+    "start": "2026-01-16T17:00",
+    "end": "2026-01-16T18:30",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4049,
+    "title": "The Worlds of Wodehouse in Words and Music",
+    "start": "2026-01-16T17:30",
+    "end": "2026-01-16T18:20",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Hal Cazalet",
+      "Stephen Fry",
+      "Simon Beck",
+      "Anish Gawande"
+    ],
+    "tags": [
+      "Literature"
+    ]
+  },
+  {
+    "id": 4050,
+    "title": "Raga and Tala: The History of Instruments in Indian Classical Music",
+    "start": "2026-01-16T17:30",
+    "end": "2026-01-16T18:20",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Sumana Chandrashekar",
+      "Namita Devidayal",
+      "Sadhana Rao"
+    ],
+    "tags": [
+      "Music"
+    ]
+  },
+  {
+    "id": 4051,
+    "title": "Kissinger versus Brzezinski: Americas Great Cold War Rivalry",
+    "start": "2026-01-16T17:30",
+    "end": "2026-01-16T18:20",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Jérémie Gallon",
+      "Edward Luce",
+      "Maya Mirchandani"
+    ],
+    "tags": [
+      "Biography,History"
+    ]
+  },
+  {
+    "id": 4052,
+    "title": "Poetry Hour: Unquiet Words",
+    "start": "2026-01-16T17:30",
+    "end": "2026-01-16T18:20",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Badri Narayan",
+      "Parwati Tirkey",
+      "Charmi Chheda",
+      "Radha Chakravarty",
+      "Anisha Lalvani"
+    ],
+    "tags": [
+      "Poetry"
+    ]
+  },
+  {
+    "id": 4054,
+    "title": "The Magic of the Lost Earrings",
+    "start": "2026-01-17T10:00",
+    "end": "2026-01-17T10:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Sudha Murty",
+      "Mandira Nayar"
+    ],
+    "tags": [
+      "Childrens Literature,Fiction"
+    ]
+  },
+  {
+    "id": 4055,
+    "title": "Story of a Murder",
+    "start": "2026-01-17T10:00",
+    "end": "2026-01-17T10:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Hallie Rubenhold",
+      "Tim Adams"
+    ],
+    "tags": [
+      "Crime"
+    ]
+  },
+  {
+    "id": 4056,
+    "title": "Hyphenated Worlds",
+    "start": "2026-01-17T10:00",
+    "end": "2026-01-17T10:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Vivek Shanbhag",
+      "K. R. Meera",
+      "Rita Kothari",
+      "Arunava Sinha"
+    ],
+    "tags": [
+      "Fiction,Literature,Multilingualism"
+    ]
+  },
+  {
+    "id": 4057,
+    "title": "The Power and Perils of Law",
+    "start": "2026-01-17T10:00",
+    "end": "2026-01-17T10:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Saikrishna Prakash",
+      "Ketu Shah",
+      "Fara Dabhoiwala",
+      "Maya Mirchandani"
+    ],
+    "tags": [
+      "Law"
+    ]
+  },
+  {
+    "id": 4058,
+    "title": "Sita’s Veil",
+    "start": "2026-01-17T10:00",
+    "end": "2026-01-17T10:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Anamika",
+      "Nishtha Gautam",
+      "Prabhat Ranjan"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4059,
+    "title": "You Can Have It All: Unlock the Secrets to a Great Life",
+    "start": "2026-01-17T11:00",
+    "end": "2026-01-17T11:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Gaur Gopal Das",
+      "Poulomi Chatterjee"
+    ],
+    "tags": [
+      "Self-help"
+    ]
+  },
+  {
+    "id": 4060,
+    "title": "The Chola Tigers: Avengers of Somnath",
+    "start": "2026-01-17T11:00",
+    "end": "2026-01-17T11:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Amish",
+      "Viveka Kumari"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4061,
+    "title": "Portraits of the Artists",
+    "start": "2026-01-17T11:00",
+    "end": "2026-01-17T11:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Ivo de Figuerido",
+      "Andrew Graham-Dixon",
+      "Marie Darrieussecq",
+      "Vanessa Thorpe"
+    ],
+    "tags": [
+      "Art,Biography"
+    ]
+  },
+  {
+    "id": 4062,
+    "title": "A Home in the Himalayas",
+    "start": "2026-01-17T11:00",
+    "end": "2026-01-17T11:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Anuradha Roy",
+      "Stephen Alter",
+      "Georgina Godwin"
+    ],
+    "tags": [
+      "Himalayas,Memoir,Nature"
+    ]
+  },
+  {
+    "id": 4063,
+    "title": "Long and the Short",
+    "start": "2026-01-17T11:00",
+    "end": "2026-01-17T11:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Bijoya Sawian",
+      "Chris Barkley",
+      "Prajwal Parajuly",
+      "Bhavika Govil"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4205,
+    "title": "Live Lines: India-UK Publishing Fellows Connect",
+    "start": "2026-01-17T11:00",
+    "end": "2026-01-17T11:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4242,
+    "title": "Gavri Bhil Parampara: Bhil Folk Traditions",
+    "start": "2026-01-17T11:00",
+    "end": "2026-01-17T11:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Aditi Mehta",
+      "Mini Nanda"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4064,
+    "title": "Mahakavi Kanhaiyalal Sethia Award",
+    "start": "2026-01-17T12:00",
+    "end": "2026-01-17T12:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Namita Gokhale",
+      "Sanjoy K. Roy",
+      "Ranjit Hoskote"
+    ],
+    "tags": [
+      "Award Ceremony"
+    ]
+  },
+  {
+    "id": 4065,
+    "title": "Biographers Ball",
+    "start": "2026-01-17T12:00",
+    "end": "2026-01-17T12:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Rima Hooja",
+      "Scott Anderson",
+      "Jung Chang",
+      "Edward Luce",
+      "Lucy Hughes-Hallett",
+      "Abhishek Choudhary"
+    ],
+    "tags": [
+      "Biography,Writing"
+    ]
+  },
+  {
+    "id": 4066,
+    "title": "The Measure of Justice",
+    "start": "2026-01-17T12:00",
+    "end": "2026-01-17T12:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Ashwani Kumar",
+      "Ketu Shah",
+      "Vrinda Grover",
+      "Sudha Sadhanand"
+    ],
+    "tags": [
+      "Law"
+    ]
+  },
+  {
+    "id": 4067,
+    "title": "Across Genres",
+    "start": "2026-01-17T12:00",
+    "end": "2026-01-17T12:50",
+    "venue": "Durbar Hall",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4068,
+    "title": "Asian Drama",
+    "start": "2026-01-17T12:00",
+    "end": "2026-01-17T12:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "C. Raja Mohan",
+      "Ranjit Rae",
+      "Suhasini Haidar",
+      "Navtej Sarna",
+      "Shubhajit Roy"
+    ],
+    "tags": [
+      "Asia,Geopolitics"
+    ]
+  },
+  {
+    "id": 4206,
+    "title": "Optimism in the Times of Change: Mapping the Future for Big Publishers",
+    "start": "2026-01-17T12:00",
+    "end": "2026-01-17T12:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4243,
+    "title": "Anamika Ki Duniya: Anamika’s World",
+    "start": "2026-01-17T12:00",
+    "end": "2026-01-17T12:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Anamika",
+      "Jai Prakash Pandey"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4069,
+    "title": "FIRST EDITION: Karuna, The Power of Compassion by Kailash Satyarthi",
+    "start": "2026-01-17T13:00",
+    "end": "2026-01-17T13:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Kailash Satyarthi",
+      "Amish"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4070,
+    "title": "Dining with the Stars",
+    "start": "2026-01-17T13:00",
+    "end": "2026-01-17T13:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Anupama Chopra",
+      "Bhumi Pednekar",
+      "Chirag Thakkar"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4071,
+    "title": "FIRST EDITION: A Brush with Life Satish Gujral",
+    "start": "2026-01-17T13:00",
+    "end": "2026-01-17T13:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Feroze Gujral",
+      "Kishore Singh"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4072,
+    "title": "Ammis Kitchen: Heirloom Recipes from Rampur",
+    "start": "2026-01-17T13:00",
+    "end": "2026-01-17T13:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Pernia Qureshi",
+      "Tarana Husain Khan"
+    ],
+    "tags": [
+      "Culture,Food and Memory"
+    ]
+  },
+  {
+    "id": 4073,
+    "title": "FIRST EDITION:Lean Spark: Frugal by Design, Global in Impact by Jaideep Prabhu, Mukesh Sud, Priyank Narayan",
+    "start": "2026-01-17T13:00",
+    "end": "2026-01-17T13:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Jaideep Prabhu",
+      "Mukesh Sud",
+      "Sanjoy K. Roy",
+      "Sahiba Bali"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4208,
+    "title": "Northern Lights: Childrens Literature from Norway",
+    "start": "2026-01-17T13:00",
+    "end": "2026-01-17T13:30",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4074,
+    "title": "Human Edge: Whats Cooking in AI",
+    "start": "2026-01-17T14:00",
+    "end": "2026-01-17T14:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Ali Eslami",
+      "Abhishek Singh",
+      "Nitin Seth",
+      "Barsali Bhattacharyya",
+      "Sumeet Shetty"
+    ],
+    "tags": [
+      "Technology"
+    ]
+  },
+  {
+    "id": 4075,
+    "title": "Gaza Genocide",
+    "start": "2026-01-17T14:00",
+    "end": "2026-01-17T14:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Avi Shlaim",
+      "Ramita Navai",
+      "Lena Khalaf Tuffaha",
+      "Noa Avishag Schnall",
+      "Ahmed Alnaouq",
+      "Navdeep Suri"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4076,
+    "title": "What Women Dont Want",
+    "start": "2026-01-17T14:00",
+    "end": "2026-01-17T14:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Bhavika Govil",
+      "Shunali Khullar Shroff",
+      "Amrita Mahale",
+      "Poulomi Chatterjee"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4077,
+    "title": "The Growth Story of the 21st Century: The Economics and Opportunity of Climate Action",
+    "start": "2026-01-17T14:00",
+    "end": "2026-01-17T14:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Nicholas Stern",
+      "Amitabh Sinha"
+    ],
+    "tags": [
+      "Economics,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4078,
+    "title": "The Great Game Continues",
+    "start": "2026-01-17T14:00",
+    "end": "2026-01-17T14:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Stephen Alter",
+      "Deepa Anappara",
+      "Navtej Sarna"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4210,
+    "title": "Popular Prakashan: A Century of Seeding Culture",
+    "start": "2026-01-17T14:00",
+    "end": "2026-01-17T14:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4244,
+    "title": "Ek Patrakar ke Sansmaran : A Journalist Remembers",
+    "start": "2026-01-17T14:00",
+    "end": "2026-01-17T14:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Laxmi Prasad Pant",
+      "Tabeenah Anjum"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4079,
+    "title": "Table for Four: Delhi’s Dining Legacy",
+    "start": "2026-01-17T15:00",
+    "end": "2026-01-17T15:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4080,
+    "title": "My Sister and Other Lovers",
+    "start": "2026-01-17T15:00",
+    "end": "2026-01-17T15:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Esther Freud",
+      "Karuna Ezara Parikh"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4081,
+    "title": "Nainon Mein Aan Baan: Nuances of Indian Music",
+    "start": "2026-01-17T15:00",
+    "end": "2026-01-17T15:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Yatindra Mishra",
+      "Vaishali Mathur",
+      "Vidya Shah"
+    ],
+    "tags": [
+      "Culture"
+    ]
+  },
+  {
+    "id": 4082,
+    "title": "The Wisdom of Indian Food",
+    "start": "2026-01-17T15:00",
+    "end": "2026-01-17T15:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Rujuta Diwekar",
+      "Namita Devidayal"
+    ],
+    "tags": [
+      "Culture,Food,Health"
+    ]
+  },
+  {
+    "id": 4083,
+    "title": "The Case for Books",
+    "start": "2026-01-17T15:00",
+    "end": "2026-01-17T15:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Ranjit Hoskote",
+      "Martin Puchner",
+      "Dominic Tomalin",
+      "Emma House"
+    ],
+    "tags": [
+      "Culture"
+    ]
+  },
+  {
+    "id": 4212,
+    "title": "Authors and Agents: The Delicate Balance of Expectations",
+    "start": "2026-01-17T15:00",
+    "end": "2026-01-17T15:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4245,
+    "title": "My Life in Dance: Nritya Ki Yatra",
+    "start": "2026-01-17T15:00",
+    "end": "2026-01-17T15:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Rachana Yadav",
+      "Preeti Sharma"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4084,
+    "title": "What is Free Speech? The History of a Dangerous Idea",
+    "start": "2026-01-17T16:00",
+    "end": "2026-01-17T16:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Fara Dabhoiwala",
+      "Oscar Guardiola-Rivera"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4085,
+    "title": "Women on the Frontlines",
+    "start": "2026-01-17T16:00",
+    "end": "2026-01-17T16:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Hoihnu Hauzel",
+      "Harinder (Shammy) Baweja",
+      "Rudraneil Sengupta"
+    ],
+    "tags": [
+      "Journalism,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4086,
+    "title": "Theres a Ghost in My Room",
+    "start": "2026-01-17T16:00",
+    "end": "2026-01-17T16:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Sanjoy K. Roy",
+      "Namita Gokhale"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 4087,
+    "title": "Polarities: Gandhi, Savarkar and Jinnah",
+    "start": "2026-01-17T16:00",
+    "end": "2026-01-17T16:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Makarand R. Paranjape",
+      "Alex von Tunzelmann",
+      "Kishwar Desai"
+    ],
+    "tags": [
+      "Indian History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4214,
+    "title": "Marathi Publishing: Vaibhavi Parampara Aani Ashwasak Bhavitavya",
+    "start": "2026-01-17T16:00",
+    "end": "2026-01-17T16:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4246,
+    "title": "Kavita Main Samaj Ki Dhadkan: Poetry and Life",
+    "start": "2026-01-17T16:00",
+    "end": "2026-01-17T16:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Badri Narayan",
+      "Jai Prakash Pandey"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4088,
+    "title": "FIRST EDITION: The Sari Eternal by Lakshmi Puri",
+    "start": "2026-01-17T17:00",
+    "end": "2026-01-17T17:30",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Lakshmi Puri",
+      "Vidya Shah",
+      "Namita Gokhale"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4089,
+    "title": "FIRST EDITION: Wild Capital by Neha Sinha",
+    "start": "2026-01-17T17:00",
+    "end": "2026-01-17T17:30",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Neha Sinha",
+      "Anuradha Roy"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4090,
+    "title": "FIRST EDITION: From Dynasties to Democracy by Tabeenah Anjum and Deep Mukherjee",
+    "start": "2026-01-17T17:00",
+    "end": "2026-01-17T17:30",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Tabeenah Anjum",
+      "Deep Mukherjee",
+      "Anish Gawande"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4091,
+    "title": "FIRST EDITION: Portrait of an Artist by Rohit Chawla",
+    "start": "2026-01-17T17:00",
+    "end": "2026-01-17T17:30",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Rohit Chawla"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4220,
+    "title": "Marketing Roundtable: The Hub and the Spokes in the Wheel",
+    "start": "2026-01-17T17:00",
+    "end": "2026-01-17T18:30",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4092,
+    "title": "The Outsider: A Memoir of Misfits",
+    "start": "2026-01-17T17:30",
+    "end": "2026-01-17T18:20",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Vir Das",
+      "Sanjoy K. Roy"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 4093,
+    "title": "Art in a State of Siege",
+    "start": "2026-01-17T17:30",
+    "end": "2026-01-17T18:20",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Joseph Koerner",
+      "Stephen Greenblatt"
+    ],
+    "tags": [
+      "Art,History"
+    ]
+  },
+  {
+    "id": 4094,
+    "title": "Across Genres",
+    "start": "2026-01-17T17:30",
+    "end": "2026-01-17T18:20",
+    "venue": "Durbar Hall",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4095,
+    "title": "Poetry Hour: Poetry in the Air",
+    "start": "2026-01-17T17:30",
+    "end": "2026-01-17T18:20",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Makarand R. Paranjape",
+      "Malashri Lal",
+      "Devyani Bhardwaj",
+      "Paramita Satpathy",
+      "Hoihnu Hauzel",
+      "Anisha Lalvani"
+    ],
+    "tags": [
+      "Poetry"
+    ]
+  },
+  {
+    "id": 4097,
+    "title": "Question 7",
+    "start": "2026-01-18T10:00",
+    "end": "2026-01-18T10:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Richard Miller Flanagan",
+      "Tim Adams"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 4098,
+    "title": "Vermeer: A Life Lost and Found",
+    "start": "2026-01-18T10:00",
+    "end": "2026-01-18T10:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Andrew Graham-Dixon",
+      "Joseph Koerner"
+    ],
+    "tags": [
+      "Art,Biography,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4099,
+    "title": "Accelerations: Days of Future Past",
+    "start": "2026-01-18T10:00",
+    "end": "2026-01-18T10:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Ali Eslami",
+      "Palanivel Thiaga Rajan",
+      "Marcus du Sautoy",
+      "Meru Gokhale"
+    ],
+    "tags": [
+      "Culture,Technology"
+    ]
+  },
+  {
+    "id": 4100,
+    "title": "The Gig Economy",
+    "start": "2026-01-18T10:00",
+    "end": "2026-01-18T10:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Vandana Vasudevan",
+      "Rakesh Mohan",
+      "Ketaki Karnik",
+      "Santosh Desai"
+    ],
+    "tags": [
+      "Economy"
+    ]
+  },
+  {
+    "id": 4101,
+    "title": "Ashes, Origins and Objects: Rethinking the Ancient World",
+    "start": "2026-01-18T10:00",
+    "end": "2026-01-18T10:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Rubén Montoya",
+      "Josephine Quinn",
+      "Sanjoy K. Roy"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4221,
+    "title": "The French Connection: Snapshots from the Publishing Industry",
+    "start": "2026-01-18T10:00",
+    "end": "2026-01-18T10:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4102,
+    "title": "A Continent in Crisis: Russia, Ukraine and the European Story",
+    "start": "2026-01-18T11:00",
+    "end": "2026-01-18T11:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Radoslaw Sikorski",
+      "Navtej Sarna"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4104,
+    "title": "Picture the Story: Art, Image and Narratives",
+    "start": "2026-01-18T11:00",
+    "end": "2026-01-18T11:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Nishant Jain",
+      "Payal Puri",
+      "Sarnath Banerjee",
+      "Sumeet Shetty"
+    ],
+    "tags": [
+      "Art,Culture"
+    ]
+  },
+  {
+    "id": 4105,
+    "title": "The Pulse of a Nation",
+    "start": "2026-01-18T11:00",
+    "end": "2026-01-18T11:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Richard Horton",
+      "Tarun Khanna",
+      "Vikram Patel",
+      "Poonam Muttreja"
+    ],
+    "tags": [
+      "Health"
+    ]
+  },
+  {
+    "id": 4106,
+    "title": "Quixote: Tilting at Windmills:",
+    "start": "2026-01-18T11:00",
+    "end": "2026-01-18T11:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Guillermo Rodríguez",
+      "Jesús Ruiz Mantilla",
+      "Gurcharan Das",
+      "Martin Puchner",
+      "Pepa Roma"
+    ],
+    "tags": [
+      "Adaptations,Culture,Literature"
+    ]
+  },
+  {
+    "id": 4222,
+    "title": "The Future of Books: Reimagining Narratives",
+    "start": "2026-01-18T11:00",
+    "end": "2026-01-18T11:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4247,
+    "title": "Anuvad : Found in Translation",
+    "start": "2026-01-18T11:00",
+    "end": "2026-01-18T11:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Kumari Rohini",
+      "Sujata Shiven",
+      "Devyani Bhardwaj"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4107,
+    "title": "Imagine: The New Horizons of Creativity",
+    "start": "2026-01-18T12:00",
+    "end": "2026-01-18T12:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Prasoon Joshi",
+      "Kishwar Desai"
+    ],
+    "tags": [
+      "Culture"
+    ]
+  },
+  {
+    "id": 4108,
+    "title": "From Lumbini to Mathura: The First Art and Architecture of Buddhism",
+    "start": "2026-01-18T12:00",
+    "end": "2026-01-18T12:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Robin A. Coningham",
+      "Sonya Rhie Mace",
+      "William Dalrymple"
+    ],
+    "tags": [
+      "Art,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4109,
+    "title": "The Murder Dualogue",
+    "start": "2026-01-18T12:00",
+    "end": "2026-01-18T12:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Anirban Bhattacharyya",
+      "Rudraneil Sengupta",
+      "Amrita Mahale"
+    ],
+    "tags": [
+      "Crime,Fiction,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4110,
+    "title": "The Poetry Pharmacy: Prescriptions for the Mind Body and Soul",
+    "start": "2026-01-18T12:00",
+    "end": "2026-01-18T12:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "William Sieghart",
+      "Karuna Ezara Parikh",
+      "Sumanto Chattopadhyay"
+    ],
+    "tags": [
+      "Poetry"
+    ]
+  },
+  {
+    "id": 4111,
+    "title": "The Identities We Carry",
+    "start": "2026-01-18T12:00",
+    "end": "2026-01-18T12:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Colin Grant",
+      "Tanya Talaga",
+      "Steve MinOn",
+      "Julia Wheeler"
+    ],
+    "tags": [
+      "Fiction,Non-Fiction,Selfhood"
+    ]
+  },
+  {
+    "id": 4223,
+    "title": "Contracts: Reading the Fine Print",
+    "start": "2026-01-18T12:00",
+    "end": "2026-01-18T12:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4248,
+    "title": "Life in Books: Katha, Kahani Aur Jeevan",
+    "start": "2026-01-18T12:00",
+    "end": "2026-01-18T12:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Vaishali Mathur",
+      "Smit Zaveri"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4112,
+    "title": "Speaking My Mind",
+    "start": "2026-01-18T13:00",
+    "end": "2026-01-18T13:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Leo Varadkar",
+      "Georgina Godwin"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 4113,
+    "title": "The Spirit of Place",
+    "start": "2026-01-18T13:00",
+    "end": "2026-01-18T13:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Ruchir Joshi",
+      "Rahul Bhattacharya",
+      "Rana Dasgupta",
+      "Chiki Sarkar"
+    ],
+    "tags": [
+      "Fiction,Non-Fiction,Writing"
+    ]
+  },
+  {
+    "id": 4115,
+    "title": "The Black Wave",
+    "start": "2026-01-18T13:00",
+    "end": "2026-01-18T13:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Kim Ghattas",
+      "Suhasini Haidar"
+    ],
+    "tags": [
+      "Culture,Geopolitics,History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4114,
+    "title": "First Edition: Voices in the Wind: Folktales, Folklore and Spirit Stories from the Himalaya: Edited by Namita Gokhale and Malashri Lal",
+    "start": "2026-01-18T13:00",
+    "end": "2026-01-18T13:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Namita Gokhale",
+      "May-Elin Stener",
+      "Martin Puchner",
+      "Malashri Lal",
+      "Nalinakshya Talukdar",
+      "May-Elin Stener",
+      "Martin Puchner"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4116,
+    "title": "FIRST EDITION: Sun, Emperor and Pope",
+    "start": "2026-01-18T13:00",
+    "end": "2026-01-18T13:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Jos Gommans",
+      "Rima Hooja",
+      "William Dalrymple"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4224,
+    "title": "The Shadecard of Self-publishing",
+    "start": "2026-01-18T13:00",
+    "end": "2026-01-18T13:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4117,
+    "title": "The South",
+    "start": "2026-01-18T14:00",
+    "end": "2026-01-18T14:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Tash Aw",
+      "Sandip Roy"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4118,
+    "title": "Ideas of Justice",
+    "start": "2026-01-18T14:00",
+    "end": "2026-01-18T14:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Justice DY Chandrachud",
+      "Vir Sanghvi"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4119,
+    "title": "Ripples Along the Brahmaputra",
+    "start": "2026-01-18T14:00",
+    "end": "2026-01-18T14:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Aruni Kashyap",
+      "Rashmi Narzary",
+      "Hoihnu Hauzel"
+    ],
+    "tags": [
+      "Culture,Fiction"
+    ]
+  },
+  {
+    "id": 4120,
+    "title": "Lifequake",
+    "start": "2026-01-18T14:00",
+    "end": "2026-01-18T02:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Tarini Mohan",
+      "Amrita Tripathi"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4121,
+    "title": "Brewing Poetry by Taj Mahal Tea",
+    "start": "2026-01-18T14:00",
+    "end": "2026-01-18T14:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [],
+    "tags": [
+      "Poetry"
+    ]
+  },
+  {
+    "id": 4225,
+    "title": "The Translators Imprint: New Pathways for Publishing Translations",
+    "start": "2026-01-18T14:00",
+    "end": "2026-01-18T14:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4249,
+    "title": "Mukhaute: The Yogi and the Snow Leopard",
+    "start": "2026-01-18T14:00",
+    "end": "2026-01-18T14:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4122,
+    "title": "This Is For Everyone",
+    "start": "2026-01-18T15:00",
+    "end": "2026-01-18T15:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Tim Berners-Lee",
+      "Georgina Godwin"
+    ],
+    "tags": [
+      "Memoir,Technology"
+    ]
+  },
+  {
+    "id": 4123,
+    "title": "Geopolitics of the XX Century",
+    "start": "2026-01-18T15:00",
+    "end": "2026-01-18T15:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Edward Luce",
+      "Fredrik Logevall",
+      "Thant Myint-U",
+      "Alex von Tunzelmann",
+      "Anne Applebaum"
+    ],
+    "tags": [
+      "Geopolitics"
+    ]
+  },
+  {
+    "id": 4124,
+    "title": "Writing Lives: K.M. Panikkar and Lal Bahadur Shastri",
+    "start": "2026-01-18T15:00",
+    "end": "2026-01-18T15:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Narayani Basu",
+      "Sanjeev Chopra",
+      "Abhishek Choudhary"
+    ],
+    "tags": [
+      "Biography,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4125,
+    "title": "The Hindu Way: Continuity and Change",
+    "start": "2026-01-18T15:00",
+    "end": "2026-01-18T15:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Pariksith Singh",
+      "Shaunaka Rishi Das",
+      "Pavan K. Varma",
+      "Namita Devidayal"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4126,
+    "title": "Memories in Motion: The Art of Remembering",
+    "start": "2026-01-18T15:00",
+    "end": "2026-01-18T15:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Neige Sinno",
+      "Marie Darrieussecq",
+      "Bee Rowlatt"
+    ],
+    "tags": [
+      "Memoir,Memories"
+    ]
+  },
+  {
+    "id": 4226,
+    "title": "Ye Dil Manga More: Art and Anime from Japan",
+    "start": "2026-01-18T15:00",
+    "end": "2026-01-18T15:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4251,
+    "title": "Sansani: True Crime",
+    "start": "2026-01-18T15:00",
+    "end": "2026-01-18T15:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Anirban Bhattacharyya",
+      "Rijul Kataria"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4127,
+    "title": "The Twice Promised Land: The British Mandate in Palestine",
+    "start": "2026-01-18T16:00",
+    "end": "2026-01-18T16:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Caroline Elkins",
+      "Avi Shlaim",
+      "William Dalrymple"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4128,
+    "title": "The Poetry of Landscape, Memory and Resistance",
+    "start": "2026-01-18T16:00",
+    "end": "2026-01-18T16:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Alice Oswald",
+      "Lena Khalaf Tuffaha",
+      "Tamim Al-Barghouti",
+      "Jeet Thayil"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4129,
+    "title": "Spirit of the Northeast",
+    "start": "2026-01-18T16:00",
+    "end": "2026-01-18T16:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Rashmi Narzary",
+      "Hoihnu Hauzel",
+      "Bijoya Sawian",
+      "Aruni Kashyap"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4130,
+    "title": "The Calm Prescription",
+    "start": "2026-01-18T16:00",
+    "end": "2026-01-18T16:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Luke Coutinho",
+      "Puneeta Roy"
+    ],
+    "tags": [
+      "Self-help"
+    ]
+  },
+  {
+    "id": 4131,
+    "title": "Rajasthani Sahitya Mein Gothic Rachnayein: The Magical, The Supernatural and Gothic Imagination",
+    "start": "2026-01-18T16:00",
+    "end": "2026-01-18T16:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "CP Deval",
+      "Nand Bhardwaj",
+      "Preeti Sharma"
+    ],
+    "tags": [
+      "Literature,Rajasthan"
+    ]
+  },
+  {
+    "id": 4227,
+    "title": "Challenges Before the Publishing Industry",
+    "start": "2026-01-18T16:00",
+    "end": "2026-01-18T16:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4250,
+    "title": "The Emperor’s General: Raja Man Singh of Amber",
+    "start": "2026-01-18T16:00",
+    "end": "2026-01-18T16:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Rima Hooja",
+      "Chhavi Rajawat"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4132,
+    "title": "FIRST EDITION: The Pralaya Prophecy by Mridula Ramesh",
+    "start": "2026-01-18T17:00",
+    "end": "2026-01-18T17:30",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Mridula Ramesh",
+      "Swati Chopra",
+      "Namita Gokhale"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4133,
+    "title": "Shri Dwarka Prasad Agarwal Samman",
+    "start": "2026-01-18T17:00",
+    "end": "2026-01-18T17:30",
+    "venue": "Charbagh",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4134,
+    "title": "FIRST EDITION: The Unbecoming by Kartikeya Vajpai",
+    "start": "2026-01-18T17:00",
+    "end": "2026-01-18T17:30",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Kartikeya Vajpai",
+      "Milee Ashwarya"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4135,
+    "title": "FIRST EDITION: A Flag to Live and Die for by Navtej Sarna",
+    "start": "2026-01-18T17:00",
+    "end": "2026-01-18T17:30",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Navtej Sarna",
+      "Mandira Nayar"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4136,
+    "title": "FIRST EDITION: Kissagram by Prabhat Ranjan",
+    "start": "2026-01-18T17:00",
+    "end": "2026-01-18T17:30",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Prabhat Ranjan",
+      "Manisha Kulshreshtha",
+      "Yatindra Mishra",
+      "Giriraj Karadoo",
+      "Satyadeep Chhetri",
+      "Esha Chatterjee"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4228,
+    "title": "Academic Publishing: The Triad of Access, Speed and Excellence",
+    "start": "2026-01-18T17:00",
+    "end": "2026-01-18T17:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4137,
+    "title": "Autocracy, Inc: The Dictators Who Want to Run the World",
+    "start": "2026-01-18T17:30",
+    "end": "2026-01-18T18:20",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Anne Applebaum",
+      "Edward Luce"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4138,
+    "title": "Observing Afghanistan: The Fall and Rise of Taliban",
+    "start": "2026-01-18T17:30",
+    "end": "2026-01-18T18:20",
+    "venue": "Charbagh",
+    "speakers": [
+      "Lyse Doucet",
+      "Jon Lee Anderson",
+      "Suhasini Haidar"
+    ],
+    "tags": [
+      "Afghanistan,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4139,
+    "title": "Jane Austen: A Living Legacy",
+    "start": "2026-01-18T17:30",
+    "end": "2026-01-18T18:20",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Kate Evans",
+      "Bee Rowlatt",
+      "Ranjit Hoskote",
+      "Colin Burrows"
+    ],
+    "tags": [
+      "Literature"
+    ]
+  },
+  {
+    "id": 4140,
+    "title": "The Medical Algorithm",
+    "start": "2026-01-18T17:30",
+    "end": "2026-01-18T18:20",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Rachel Clarke",
+      "Ambarish Satwik"
+    ],
+    "tags": [
+      "Medicine,Technology"
+    ]
+  },
+  {
+    "id": 4141,
+    "title": "Poetry Hour: Vagrant Poems",
+    "start": "2026-01-18T17:30",
+    "end": "2026-01-18T18:20",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Indran Amirthanayagam",
+      "Abhay K.",
+      "Karuna Ezara Parikh",
+      "Jeet Thayil",
+      "Anisha Lalvani"
+    ],
+    "tags": [
+      "Poetry"
+    ]
+  },
+  {
+    "id": 4143,
+    "title": "The Legacy of Violence",
+    "start": "2026-01-19T10:00",
+    "end": "2026-01-19T10:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Caroline Elkins",
+      "William Dalrymple"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4144,
+    "title": "Alice Oswald: A Journey Through Words and Worlds",
+    "start": "2026-01-19T10:00",
+    "end": "2026-01-19T10:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Alice Oswald",
+      "Jeet Thayil"
+    ],
+    "tags": [
+      "Poetry,Writing"
+    ]
+  },
+  {
+    "id": 4145,
+    "title": "Epic Women",
+    "start": "2026-01-19T10:00",
+    "end": "2026-01-19T10:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Kavita Kane",
+      "Volga",
+      "Anand Neelakantan",
+      "Malashri Lal"
+    ],
+    "tags": [
+      "Mythology"
+    ]
+  },
+  {
+    "id": 4146,
+    "title": "Geotechnography",
+    "start": "2026-01-19T10:00",
+    "end": "2026-01-19T10:50",
+    "venue": "Durbar Hall",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4185,
+    "title": "Gavri of the Mewar Bhils: Playing with the Goddess",
+    "start": "2026-01-19T10:00",
+    "end": "2026-01-19T10:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Aditi Mehta",
+      "Rima Hooja"
+    ],
+    "tags": [
+      "Culture,History"
+    ]
+  },
+  {
+    "id": 4147,
+    "title": "Celebrating Manga and Graphic Novels",
+    "start": "2026-01-19T11:00",
+    "end": "2026-01-19T11:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Ujan Dutta",
+      "Yoshitoki Oima",
+      "Abeer Kapoor",
+      "Radhika Jha",
+      "Tomoko Kikuchi"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4148,
+    "title": "Gen Z, the Millenials and Mummyji",
+    "start": "2026-01-19T11:00",
+    "end": "2026-01-19T11:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Anurag Minus Verma",
+      "Santosh Desai",
+      "Ria Chopra",
+      "Chirag Thakkar"
+    ],
+    "tags": [
+      "Culture,Internet"
+    ]
+  },
+  {
+    "id": 4149,
+    "title": "Murder, Mayhem, Spectral Secrets",
+    "start": "2026-01-19T11:00",
+    "end": "2026-01-19T11:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Hemangini Dutt Majumder",
+      "Steve MinOn",
+      "Bee Rowlatt"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4150,
+    "title": "The Chola Raids in Southeast Asia",
+    "start": "2026-01-19T11:00",
+    "end": "2026-01-19T11:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Herald van der Linde",
+      "William Dalrymple"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4151,
+    "title": "Precious by Design: Museums and Memory",
+    "start": "2026-01-19T11:00",
+    "end": "2026-01-19T11:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [],
+    "tags": [
+      "Culture"
+    ]
+  },
+  {
+    "id": 4229,
+    "title": "Redefining Bestsellers: What is Selling in the Indian Markets",
+    "start": "2026-01-19T11:00",
+    "end": "2026-01-19T11:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4252,
+    "title": "Partition Stories : Vibhajan Ki Kathaye",
+    "start": "2026-01-19T11:00",
+    "end": "2026-01-19T11:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Bhawana Somaaya",
+      "Kishwar Desai",
+      "Tabeenah Anjum"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4152,
+    "title": "Blueprints: How Mathematics Shapes Creativity",
+    "start": "2026-01-19T12:00",
+    "end": "2026-01-19T12:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Marcus du Sautoy",
+      "Sanjoy K. Roy"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4153,
+    "title": "The Legend of Kumarikandam",
+    "start": "2026-01-19T12:00",
+    "end": "2026-01-19T12:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Anand Neelakantan",
+      "Mridula Ramesh"
+    ],
+    "tags": [
+      "Mythology"
+    ]
+  },
+  {
+    "id": 4154,
+    "title": "The Story of a Heart",
+    "start": "2026-01-19T12:00",
+    "end": "2026-01-19T12:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Rachel Clarke",
+      "Ambarish Satwik"
+    ],
+    "tags": [
+      "Medicine"
+    ]
+  },
+  {
+    "id": 4155,
+    "title": "In Many Tongues",
+    "start": "2026-01-19T12:00",
+    "end": "2026-01-19T12:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Rita Kothari",
+      "Paramita Satpathy",
+      "Badri Narayan",
+      "Indran Amirthanayagam",
+      "Aruni Kashyap"
+    ],
+    "tags": [
+      "Multilingualism"
+    ]
+  },
+  {
+    "id": 4156,
+    "title": "The First Footprints",
+    "start": "2026-01-19T12:00",
+    "end": "2026-01-19T12:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Ella Al-Shamahi",
+      "Tony Joseph"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4230,
+    "title": "Indology: Shades and Layers of a Civilization",
+    "start": "2026-01-19T12:00",
+    "end": "2026-01-19T12:50",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4253,
+    "title": "Lekhan: Anuvad Aur Samvad, Translation and Dialogue",
+    "start": "2026-01-19T12:00",
+    "end": "2026-01-19T12:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Prabhat Ranjan",
+      "Ashutosh Kumar Thakur"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4157,
+    "title": "FIRST EDITION: The Lady Who Carried the Monk Across the River by Pavan K. Varma",
+    "start": "2026-01-19T13:00",
+    "end": "2026-01-19T13:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Pavan K. Varma",
+      "Kishwar Desai"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4158,
+    "title": "A Guardian and the Thief",
+    "start": "2026-01-19T13:00",
+    "end": "2026-01-19T13:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Megha Majumdar",
+      "Manasi Subramaniam"
+    ],
+    "tags": [
+      "Fiction"
+    ]
+  },
+  {
+    "id": 4159,
+    "title": "Vani Prakashan Award",
+    "start": "2026-01-19T13:00",
+    "end": "2026-01-19T13:50",
+    "venue": "Surya Mahal",
+    "speakers": [],
+    "tags": [
+      "Award Ceremony"
+    ]
+  },
+  {
+    "id": 4160,
+    "title": "The Indian Caliphate: Exiled Ottomans and the Billionaire Prince",
+    "start": "2026-01-19T13:00",
+    "end": "2026-01-19T13:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Imran Mulla",
+      "Sam Dalrymple"
+    ],
+    "tags": [
+      "History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4161,
+    "title": "The Old Ways",
+    "start": "2026-01-19T13:00",
+    "end": "2026-01-19T13:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Tanya Talaga",
+      "Marcia Langton",
+      "Georgina Godwin"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4256,
+    "title": "Festival Directors Roundtable",
+    "start": "2026-01-19T13:00",
+    "end": "2026-01-19T14:30",
+    "venue": "Jaipur BookMark",
+    "speakers": [],
+    "tags": []
+  },
+  {
+    "id": 4162,
+    "title": "Climate Action and Energy Alternatives",
+    "start": "2026-01-19T14:00",
+    "end": "2026-01-19T14:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Prem Shankar Jha",
+      "Avyana Mehta",
+      "Mridula Ramesh",
+      "Amitabh Sinha"
+    ],
+    "tags": [
+      "Climate"
+    ]
+  },
+  {
+    "id": 4163,
+    "title": "Fly, Wild Swans: My Mother, Myself and China",
+    "start": "2026-01-19T14:00",
+    "end": "2026-01-19T14:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Jung Chang",
+      "Pallavi Aiyar"
+    ],
+    "tags": [
+      "Memoir,Memories,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4164,
+    "title": "Words Are all We Have",
+    "start": "2026-01-19T14:00",
+    "end": "2026-01-19T14:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Sumanto Chattopadhyay",
+      "Ria Chopra",
+      "Chris Barkley"
+    ],
+    "tags": [
+      "History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4165,
+    "title": "Private Eye",
+    "start": "2026-01-19T14:00",
+    "end": "2026-01-19T14:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Ian Hislop",
+      "Vir Sanghvi"
+    ],
+    "tags": [
+      "Journalism,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4166,
+    "title": "Legenda: The Real Women Behind the Myths",
+    "start": "2026-01-19T14:00",
+    "end": "2026-01-19T14:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Janina Ramirez",
+      "Narayani Basu"
+    ],
+    "tags": [
+      "Mythology,Women"
+    ]
+  },
+  {
+    "id": 4255,
+    "title": "Epics and Fantasy : Naya Roop",
+    "start": "2026-01-19T14:00",
+    "end": "2026-01-19T14:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Kavita Kane",
+      "Saksham Garg",
+      "Mini Nanda"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4167,
+    "title": "Homework: A Memoir",
+    "start": "2026-01-19T15:00",
+    "end": "2026-01-19T15:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Geoff Dyer",
+      "Rana Dasgupta"
+    ],
+    "tags": [
+      "Memoir"
+    ]
+  },
+  {
+    "id": 4168,
+    "title": "Thinking Indian: Scientific Endeavour and National Identity",
+    "start": "2026-01-19T15:00",
+    "end": "2026-01-19T15:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "J. Nandakumar"
+    ],
+    "tags": [
+      "History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4169,
+    "title": "Translation : Between and Across Oceans and Cultures",
+    "start": "2026-01-19T15:00",
+    "end": "2026-01-19T15:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Salma",
+      "Annamalai Imayam",
+      "GJV Prasad",
+      "Mini Krishnan"
+    ],
+    "tags": [
+      "Multilingualism,Translation"
+    ]
+  },
+  {
+    "id": 4170,
+    "title": "The Court Paintings from Royal Udaipur",
+    "start": "2026-01-19T15:00",
+    "end": "2026-01-19T15:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Debra Diamond",
+      "William Dalrymple"
+    ],
+    "tags": [
+      "Non-Fiction"
+    ]
+  },
+  {
+    "id": 4254,
+    "title": "Graphic Stories: Chitr Kathaye",
+    "start": "2026-01-19T15:00",
+    "end": "2026-01-19T15:30",
+    "venue": "AAF BAGAAN",
+    "speakers": [
+      "Arjun Raj Gaind",
+      "Ujan Dutta"
+    ],
+    "tags": []
+  },
+  {
+    "id": 4172,
+    "title": "Geographies of the Self",
+    "start": "2026-01-19T16:00",
+    "end": "2026-01-19T16:50",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [
+      "Hanako Footman",
+      "Pallavi Aiyar"
+    ],
+    "tags": [
+      "Culture,Fiction,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4173,
+    "title": "New World Order",
+    "start": "2026-01-19T16:00",
+    "end": "2026-01-19T16:50",
+    "venue": "Charbagh",
+    "speakers": [
+      "Oscar Guardiola-Rivera",
+      "Vince Cable",
+      "Rana Dasgupta",
+      "Suhasini Haidar"
+    ],
+    "tags": [
+      "Geopolitics"
+    ]
+  },
+  {
+    "id": 4174,
+    "title": "Crime and Punishment",
+    "start": "2026-01-19T16:00",
+    "end": "2026-01-19T16:50",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Chris Barkley",
+      "Arjun Raj Gaind",
+      "Hemangini Dutt Majumder"
+    ],
+    "tags": [
+      "Crime,Fiction"
+    ]
+  },
+  {
+    "id": 4175,
+    "title": "Delhis Djinns",
+    "start": "2026-01-19T16:00",
+    "end": "2026-01-19T16:50",
+    "venue": "Durbar Hall",
+    "speakers": [
+      "Eric Chopra",
+      "Swapna Liddle",
+      "Arundhati Nath"
+    ],
+    "tags": [
+      "Culture,History,Non-Fiction"
+    ]
+  },
+  {
+    "id": 4176,
+    "title": "King of Kings: The Iranian Revolution and The Fall of the Shah",
+    "start": "2026-01-19T16:00",
+    "end": "2026-01-19T16:50",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Scott Anderson",
+      "Ramita Navai"
+    ],
+    "tags": [
+      "History"
+    ]
+  },
+  {
+    "id": 4178,
+    "title": "FIRST EDITION: The Wrong Way Home by Shunali Khullar Shroff",
+    "start": "2026-01-19T17:00",
+    "end": "2026-01-19T17:30",
+    "venue": "Charbagh",
+    "speakers": [
+      "Shunali Khullar Shroff"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4179,
+    "title": "FIRST EDITION: The English Problem By Beena Kamlani",
+    "start": "2026-01-19T17:00",
+    "end": "2026-01-19T17:30",
+    "venue": "Surya Mahal",
+    "speakers": [
+      "Beena Kamlani"
+    ],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4180,
+    "title": "FIRST EDITION: Busy Women: Building Commerce and Culture in Middle India by Shinjini Kumar",
+    "start": "2026-01-19T17:00",
+    "end": "2026-01-19T17:30",
+    "venue": "Durbar Hall",
+    "speakers": [],
+    "tags": [
+      "Book Launch"
+    ]
+  },
+  {
+    "id": 4181,
+    "title": "The Poetry of Remembrance",
+    "start": "2026-01-19T17:00",
+    "end": "2026-01-19T17:30",
+    "venue": "Rajasthan Tourism Baithak",
+    "speakers": [
+      "Malashri Lal",
+      "Jagdeep Singh"
+    ],
+    "tags": [
+      "Poetry"
+    ]
+  },
+  {
+    "id": 4182,
+    "title": "Closing Debate: Freedom of Speech is a Dangerous Idea",
+    "start": "2026-01-19T17:30",
+    "end": "2026-01-19T19:00",
+    "venue": "Vedanta Front Lawn",
+    "speakers": [],
+    "tags": []
+  }
+];
+
+/* ---------- INTEREST CATEGORIES ---------- */
+const CATEGORIES = {
+  "Literature & Writing": ["Fiction","Non-Fiction","Poetry","Literature","Writing","Translation"],
+  "History & Politics": ["History","Indian History","Politics","Geopolitics"],
+  "Culture, Art & Heritage": ["Culture","Art","Music"],
+  "Science & Technology": ["Science","Technology"],
+  "Nature & Climate": ["Climate","Nature"],
+  "Famous Personalities": ["Biography","Memoir"]
+};
+
+const state = { tags:new Set(), dates:new Set(["2026-01-15","2026-01-16","2026-01-17","2026-01-18","2026-01-19"]), limit:4 };
+
+/* ---------- BUILD TAG UI ---------- */
+const tagsWrap = document.getElementById("tags");
+Object.entries(CATEGORIES).forEach(([cat,items])=>{
+  const block=document.createElement("div");
+  block.className="category";
+  block.innerHTML=`<h3>${cat}</h3>`;
+  const row=document.createElement("div");
+  row.className="tags";
+  items.forEach(t=>{
+    const el=document.createElement("div");
+    el.className="tag";
+    el.textContent=t;
+    el.onclick=()=>{ el.classList.toggle("selected"); state.tags.has(t)?state.tags.delete(t):state.tags.add(t); };
+    row.appendChild(el);
+  });
+  block.appendChild(row);
+  tagsWrap.appendChild(block);
+});
+
+/* ---------- DATES ---------- */
+["2026-01-15","2026-01-16","2026-01-17","2026-01-18","2026-01-19"].forEach(d=>{
+  const el=document.createElement("div");
+  el.className="date";
+  el.innerHTML=`<input type="checkbox" checked><strong>${d}</strong>`;
+  el.onclick=e=>{
+    const cb=el.querySelector("input");
+    if(e.target!==cb) cb.checked=!cb.checked;
+    cb.checked?state.dates.add(d):state.dates.delete(d);
+  };
+  document.getElementById("dates").appendChild(el);
+});
+
+/* ---------- NAV ---------- */
+function go(n){
+  document.querySelectorAll(".slide").forEach(s=>s.classList.remove("active"));
+  document.getElementById("s"+n).classList.add("active");
+}
+
+/* ---------- LOGIC ---------- */
+function conflict(list,c){
+  const cs=new Date(c.start), ce=new Date(c.end);
+  return list.some(s=>{
+    const ss=new Date(s.start), se=new Date(s.end);
+    return cs < se && ce > ss;
+  });
+}
+
+function generate(){
+  let sessions = DATA
+    .filter(s=>state.dates.has(s.start.split("T")[0]))
+    .map(s=>{
+      let score=0;
+      s.tags.forEach(t=>state.tags.has(t)&&score++);
+      return {...s,score};
+    })
+    .sort((a,b)=>b.score-a.score || new Date(a.start)-new Date(b.start));
+
+  const plan={};
+  state.dates.forEach(d=>plan[d]=[]);
+
+  sessions.forEach(s=>{
+    const d=s.start.split("T")[0];
+    if(plan[d] && plan[d].length<state.limit && !conflict(plan[d],s)){
+      plan[d].push(s);
+    }
+  });
+
+  render(plan);
+  go(4);
+}
+
+function render(plan){
+  const r=document.getElementById("results");
+  r.innerHTML="";
+  Object.keys(plan).sort().forEach(d=>{
+    if(!plan[d].length) return;
+    r.innerHTML+=`<div class="day">${d}</div>`;
+    plan[d].forEach(s=>{
+      r.innerHTML+=`
+        <div class="card">
+          <div class="time">
+            ${new Date(s.start).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+            <span class="badge ${s.score?"match":""}">${s.score?"Match":"Discover"}</span>
+          </div>
+          <div class="title">${s.title}</div>
+          <div class="venue">📍 ${s.venue}</div>
+          <div class="speakers">with ${s.speakers.join(", ")}</div>
+        </div>`;
+    });
+  });
+}
+</script>
+
+</body>
+</html>
